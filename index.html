@@ -93,6 +93,8 @@ textarea{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);
       <div class="mid"><div class="t" id="cd">--:--</div><div class="l" id="cdl"></div></div>
     </div>
     <button class="go" id="go">Start evening wind-down</button>
+    <button class="ghost" id="lb">Back from lunch</button>
+    <div class="alert" id="lc" hidden></div>
     <button class="ghost" id="try">Try it now: 2-minute demo</button>
     <div class="pp" id="pp"><button class="ghost" data-m="10">Postpone 10 min</button><button class="ghost" data-m="30">Postpone 30 min</button></div>
     <button class="go" id="cl" hidden>Laptop closed</button>
@@ -119,6 +121,8 @@ textarea{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);
     </div>
     <div class="card"><h2>Different time on a day</h2><p class="meta">Leave a day blank to use the time above.</p><div id="dtimes"></div></div>
     <div class="card"><h2>Alerts</h2><div class="sw" style="margin:0"><span>Chime and notification<small id="almsg">Plays at shutdown time while this page is open</small></span><input type="checkbox" id="alr" aria-label="Chime and notification"></div></div>
+    <div class="card"><h2>Back from lunch</h2><p class="meta">How long the day scent runs after you tap the button.</p>
+      <div class="seg" id="lbl"><button data-v="5">5 min</button><button data-v="10">10 min</button><button data-v="15">15 min</button></div></div>
     <div class="card"><h2>Wind-down length</h2><p class="meta">How long the evening scent runs before it switches itself off.</p>
       <div class="seg" id="len"><button data-v="15">15 min</button><button data-v="30">30 min</button><button data-v="45">45 min</button><button data-v="60">60 min</button></div></div>
     <div class="card">
@@ -164,7 +168,7 @@ textarea{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);
 <script>
 const DL={en:['M','T','W','T','F','S','S'],nl:['M','D','W','D','V','Z','Z']};
 const SCENTS={1:['Rosemary'],2:['Lavender']};
-const def={lang:(navigator.language||'en').toLowerCase().startsWith('nl')?'nl':'en',onboarded:false,dayTimes:{},shift:{d:'',m:0},closed:true,fbDone:true,alerts:false,log:[],fb:[],note:'',hist:[],timerMin:30,light:50,endAt:0,ordered:false,time:'17:30',days:[1,1,1,1,1,0,0],auto:true,cal:'off',vary:true,mode:'day',ch:{1:{scent:0,level:72,int:60},2:{scent:0,level:88,int:50}}};
+const def={lunchMin:10,lunchUntil:0,lang:(navigator.language||'en').toLowerCase().startsWith('nl')?'nl':'en',onboarded:false,dayTimes:{},shift:{d:'',m:0},closed:true,fbDone:true,alerts:false,log:[],fb:[],note:'',hist:[],timerMin:30,light:50,endAt:0,ordered:false,time:'17:30',days:[1,1,1,1,1,0,0],auto:true,cal:'off',vary:true,mode:'day',ch:{1:{scent:0,level:72,int:60},2:{scent:0,level:88,int:50}}};
 let S;
 try{S=Object.assign({},def,JSON.parse(localStorage.getItem('flor')||'{}'))}catch(e){S=def}
 S.ch[1].scent=0;S.ch[2].scent=0;
@@ -172,6 +176,7 @@ const $=id=>document.getElementById(id);
 function save(){try{localStorage.setItem('flor',JSON.stringify(S))}catch(e){}}
 
 const NL={
+'Back from lunch':'Terug van lunch','Welcome back':'Welkom terug','{0} is on for another {1}':'{0} blijft nog {1} aan','Stop':'Stop','How long the day scent runs after you tap the button.':'Hoe lang de dagelijkse geur loopt nadat je op de knop tikt.','Back from lunch: {0}':'Terug van lunch: {0}',
 'Simulated diffuser':'Gesimuleerde diffuser','Start evening wind-down':'Start avondafsluiting','Try it now: 2-minute demo':'Probeer nu: demo van 2 minuten',
 'Postpone 10 min':'10 min uitstellen','Postpone 30 min':'30 min uitstellen','Laptop closed':'Laptop dicht','Add 10 minutes':'10 minuten erbij',
 'Back to focus mode':'Terug naar focusmodus','Shutdown time':'Afsluittijd','Set when your workday ends. FLOR does the rest.':'Stel in wanneer je werkdag eindigt. FLOR doet de rest.',
@@ -215,7 +220,7 @@ const NL={
 function T(s,...a){let r=(S.lang==='nl'&&NL[s])||s;a.forEach((v,i)=>{r=r.split('{'+i+'}').join(v)});return r}
 function LOC(){return S.lang==='nl'?'nl-NL':'en-GB'}
 function dn(i){const x=new Date(2024,0,1+i).toLocaleDateString(LOC(),{weekday:'long'});return x.charAt(0).toUpperCase()+x.slice(1)}
-const SKIP=new Set(['state','head','sub','cd','cdl','m1n','m1l','m2n','m2l','clock','alert','fbcard','week','dtimes','chambers','obc','sum','notemsg','copymsg','ovp','ltv','days','dial']);
+const SKIP=new Set(['state','head','sub','cd','cdl','m1n','m1l','m2n','m2l','clock','alert','fbcard','week','dtimes','chambers','obc','sum','notemsg','copymsg','ovp','ltv','days','dial','lc']);
 function walk(el){
   if(el.nodeType===1){if((el.id&&SKIP.has(el.id))||['SCRIPT','STYLE','TEXTAREA'].includes(el.tagName))return;
     if(el.hasAttribute('aria-label')){if(el._al==null)el._al=el.getAttribute('aria-label');el.setAttribute('aria-label',T(el._al))}
@@ -227,7 +232,7 @@ function buildDT(){$('dtimes').innerHTML=[0,1,2,3,4,5,6].map(i=>`<div class="dtr
 function applyLang(l){if(l)S.lang=l;save();document.documentElement.lang=S.lang;
   $('reset').dataset.s='';$('reset').textContent='Reset prototype';$('almsg').textContent='Plays at shutdown time while this page is open';
   walk(document.body);document.querySelectorAll('#lang button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.l===S.lang));
-  buildDays();buildDT();chambers();cal();delete $('fbcard').dataset.on;render();sumRender();if($('ob').classList.contains('on'))obShow()}
+  buildDays();buildDT();chambers();cal();delete $('fbcard').dataset.on;delete $('lc').dataset.on;render();sumRender();if($('ob').classList.contains('on'))obShow()}
 $('lang').onclick=e=>{if(e.target.dataset.l)applyLang(e.target.dataset.l)};
 function timeFor(d){return S.dayTimes[(d.getDay()+6)%7]||S.time}
 function target(){const d=new Date();const[h,m]=timeFor(d).split(':').map(Number);d.setHours(h,m,0,0);if(S.shift.d===dkey(0))d.setMinutes(d.getMinutes()+S.shift.m);return d}
@@ -241,18 +246,22 @@ function render(){
   $('state').textContent=eve?T('Evening mode'):T('Focus mode active');
   $('head').textContent=eve?(S.endAt?T('Time to switch off'):T('Workday complete')):T('Until {0}',pad(target().getHours())+':'+pad(target().getMinutes()));
   $('sub').textContent=eve?(S.endAt?T('{0} is filling the room.',T(SCENTS[2][c2.scent])):T('The evening scent has finished.')):'';
-  $('go').hidden=eve;$('try').hidden=eve;$('pp').hidden=eve;$('cl').hidden=!(eve&&!S.closed);$('ext').hidden=!(eve&&S.endAt);$('back').hidden=!eve;
+  $('go').hidden=eve;$('lb').hidden=eve;$('try').hidden=eve;$('pp').hidden=eve;$('cl').hidden=!(eve&&!S.closed);$('ext').hidden=!(eve&&S.endAt);$('back').hidden=!eve;
   $('m1n').textContent=T('Focus');$('m1l').textContent=T('{0} · {1}% left',T(SCENTS[1][c1.scent]),c1.level);$('m1b').style.width=c1.level+'%';
   $('m2n').textContent=T('Evening');$('m2l').textContent=T('{0} · {1}% left',T(SCENTS[2][c2.scent]),c2.level);$('m2b').style.width=c2.level+'%';
   const low=[1,2].filter(n=>S.ch[n].level<20),al=$('alert');
   if(low.length){const n=low[0];al.hidden=false;al.innerHTML='<b>'+T('Chamber {0} is almost empty',n)+'</b>'+T('{0} · {1}% left',T(SCENTS[n][S.ch[n].scent]),S.ch[n].level)+'. '+(S.ordered?T('Refill ordered (preview only).'):T('Reorder before it runs out.')+'<br><button id="reo">'+T('Reorder cartridge')+'</button>')}else al.hidden=true;
   const wk=[6,5,4,3,2,1,0].map(o=>{const d=new Date();d.setDate(d.getDate()-o);const on=S.hist.includes(dkey(o));return '<div class="dot'+(on?' on':'')+(o==0?' t':'')+'" aria-label="'+d.toLocaleDateString(LOC(),{weekday:'long',day:'numeric',month:'long'})+(on?T(': shutdown done'):T(': no shutdown'))+'">'+DL[S.lang][(d.getDay()+6)%7]+'</div>'}).join('');
   $('week').innerHTML='<p>'+T('Last 7 days · {0} shutdowns',[0,1,2,3,4,5,6].filter(o=>S.hist.includes(dkey(o))).length)+'</p><div class="d">'+wk+'</div>';
+  const lun=!eve&&S.lunchUntil>Date.now(),lc=$('lc');lc.hidden=!lun;
+  if(lun&&!lc.dataset.on){lc.dataset.on=1;lc.innerHTML='<b>'+T('Welcome back')+'</b>'+T('{0} is on for another {1}',T(SCENTS[1][0]),'<span id="lcd"></span>')+'<br><button id="lstop">'+T('Stop')+'</button>'}
+  if(!lun)delete lc.dataset.on;
   $('dial').hidden=!(eve&&S.endAt);fbRender();wake(eve&&!!S.endAt);
   tick();
 }
 function clock(){const d=new Date();$('clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds())}
 function tick(){clock();
+  if(S.lunchUntil){const lf=S.lunchUntil-Date.now();if(lf<=0){S.lunchUntil=0;save();render()}else if($('lcd'))$('lcd').textContent=pad(Math.floor(lf/60000))+':'+pad(Math.floor(lf%60000/1000))}
   const eve=S.mode==='eve',now=new Date(),diff=target()-now;
   if(eve){
     if(S.endAt){const left=S.endAt-now;if(left<=0){S.endAt=0;S.fbDone=false;log('finish');if(S.alerts)ring(T('Your evening scent has finished.'));save();render();return}
@@ -263,7 +272,7 @@ function tick(){clock();
   const mm=Math.round(diff/60000);$('sub').textContent=T('In {0}.',mm>=60?T('{0}h {1}m',Math.floor(mm/60),pad(mm%60)):T('{0} min',mm));
 }
 function start(m){const min=m||S.timerMin;
-  S.mode='eve';S.endAt=Date.now()+min*60000;S.totalMs=min*60000;S.closed=false;S.fbDone=true;S.isTry=!!m;log(m?'try':'start');S.ch[2].level=Math.max(0,S.ch[2].level-1);save();render();
+  S.mode='eve';S.lunchUntil=0;S.endAt=Date.now()+min*60000;S.totalMs=min*60000;S.closed=false;S.fbDone=true;S.isTry=!!m;log(m?'try':'start');S.ch[2].level=Math.max(0,S.ch[2].level-1);save();render();
   $('ovp').textContent=T('Focus diffusion has stopped and {0} is on for {1} minutes, with the light at {2}%. Shut the lid and step away from your desk.',T(SCENTS[2][S.ch[2].scent]).toLowerCase(),min,S.light);$('glow').style.opacity=S.light/100;
   $('ov').classList.add('on');$('ovb').focus();
 }
@@ -324,6 +333,7 @@ $('note').value=S.note;$('savenote').onclick=()=>{S.note=$('note').value.trim();
 function sumRender(){const c=e=>S.log.filter(x=>x.e.split(' ')[0]===e).length,oo=v=>T(v?'on':'off');
   $('sum').value=[T('FLOR prototype session summary'),T('Shutdown time: {0}',S.time)+(Object.keys(S.dayTimes).length?T(' (custom times on some days)'):'')+T(', wind-down {0} min, auto-start {1}, alerts {2}',S.timerMin,oo(S.auto),oo(S.alerts)),
   T('Ritual starts: {0} | Demo runs: {1} | Laptop closed: {2} | Postponed: {3} | Extended: {4} | Cancelled: {5} | Finished: {6}',c('start'),c('try'),c('confirm'),c('postpone'),c('extend'),c('cancel'),c('finish')),
+  T('Back from lunch: {0}',c('lunch')),
   T('Shutdowns in last 7 days: {0}',[0,1,2,3,4,5,6].filter(o=>S.hist.includes(dkey(o))).length),
   T('Ratings: {0}',S.fb.length?S.fb.map(f=>T(f.mood)+(f.note?' ("'+f.note+'")':'')).join('; '):T('none yet')),T('Notes: {0}',S.note||T('none'))].join('\n')}
 $('copy').onclick=()=>{sumRender();const ok=()=>$('copymsg').textContent=T('Copied. Paste it into a message to the person who sent you the link.');const fb=()=>{$('sum').select();try{document.execCommand('copy');ok()}catch(e){$('copymsg').textContent=T('Select the text above and copy it manually.')}};try{navigator.clipboard.writeText($('sum').value).then(ok,fb)}catch(e){fb()}};
@@ -344,6 +354,10 @@ let WL=null;async function wake(on){try{if(on&&!WL&&navigator.wakeLock){WL=await
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')wake(S.mode==='eve'&&!!S.endAt)});
 // home-screen icon
 (function(){try{const c=document.createElement('canvas');c.width=c.height=180;const x=c.getContext('2d');x.fillStyle='#2F7FC1';x.fillRect(0,0,180,180);x.fillStyle='#F8F9FA';x.font='600 96px Georgia,serif';x.textAlign='center';x.textBaseline='middle';x.fillText('F',88,98);x.fillStyle='#E8893A';x.beginPath();x.arc(140,42,15,0,7);x.fill();const u=c.toDataURL('image/png');['apple-touch-icon','icon'].forEach(rel=>{const l=document.createElement('link');l.rel=rel;l.href=u;document.head.appendChild(l)})}catch(e){}})();
+$('lb').onclick=()=>{S.lunchUntil=Date.now()+S.lunchMin*60000;S.ch[1].level=Math.max(0,S.ch[1].level-1);log('lunch');save();render()};
+$('lc').onclick=e=>{if(e.target.id==='lstop'){S.lunchUntil=0;save();render()}};
+function lbl(){document.querySelectorAll('#lbl button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.v===S.lunchMin))}
+$('lbl').onclick=e=>{if(!e.target.dataset.v)return;S.lunchMin=+e.target.dataset.v;save();lbl()};lbl();
 applyLang();setInterval(tick,1000);setInterval(render,20000);
 if(!S.onboarded){$('ob').classList.add('on');obShow()}
 </script>
